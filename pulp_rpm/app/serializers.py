@@ -18,6 +18,7 @@ from pulpcore.plugin.serializers import (
 )
 
 from pulp_rpm.app.models import (
+    DistributionTree,
     Modulemd,
     ModulemdDefaults,
     Package,
@@ -526,3 +527,55 @@ class ModulemdDefaultsSerializer(SingleArtifactContentSerializer):
             'module', 'stream', 'profiles'
         )
     model = ModulemdDefaults
+
+
+class DistributionTreeSerializer(SingleArtifactContentSerializer):
+    """
+    DistributionTree serializer.
+    """
+
+    header_version = serializers.CharField(
+        help_text=_("Header Version.")
+    )
+    release_name = serializers.CharField(
+        help_text=_("Release name.")
+    )
+    release_short = serializers.CharField(
+        help_text=_("Release short name.")
+    )
+    release_version = serializers.CharField(
+        help_text=_("Release version.")
+    )
+    release_is_layered = serializers.BooleanField()
+
+    base_product_name = serializers.CharField(
+        help_text=_("Base Product name."), allow_null=True
+    )
+    base_product_short = serializers.CharField(
+        help_text=_("Base Product short name."), allow_null=True
+    )
+    base_product_version = serializers.CharField(
+        help_text=_("Base Product version."), allow_null=True
+    )
+
+    arch = serializers.CharField(
+        help_text=_("Arch.")
+    )
+    build_timestamp = serializers.FloatField()
+
+    instimage = serializers.CharField(
+        allow_null=True
+    )
+    mainimage = serializers.CharField()
+
+    discnum = serializers.IntegerField()
+    totaldiscs = serializers.IntegerField()
+
+    class Meta:
+        model = DistributionTree
+        fields = SingleArtifactContentSerializer.Meta.fields + (
+            "header_version", "release_name", "release_short", "release_version",
+            "release_is_layered", "base_product_name", "base_product_short",
+            "base_product_version", "arch", "build_timestamp", "instimage", "mainimage",
+            "discnum", "totaldiscs"
+        )

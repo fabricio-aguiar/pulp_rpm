@@ -2,11 +2,13 @@ import asyncio
 import hashlib
 import logging
 import os
+import uuid
 
 from collections import defaultdict
 from gettext import gettext as _  # noqa:F401
 from urllib.parse import urljoin
 
+from aiohttp import ClientResponseError
 import createrepo_c as cr
 
 from pulpcore.plugin.models import Artifact, ProgressBar, Remote, Repository
@@ -28,8 +30,19 @@ from pulpcore.plugin.stages import (
 
 from pulp_rpm.app.constants import CHECKSUM_TYPES, PACKAGE_REPODATA, UPDATE_REPODATA
 from pulp_rpm.app.models import (
-    Package, RpmRemote, UpdateCollection, UpdateCollectionPackage, UpdateRecord, UpdateReference
+    Addon,
+    Checksum,
+    DistributionTree,
+    Image,
+    Variant,
+    Package,
+    RpmRemote,
+    UpdateCollection,
+    UpdateCollectionPackage,
+    UpdateRecord,
+    UpdateReference,
 )
+from pulp_rpm.app.tasks.utils import get_kickstart_data
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +74,36 @@ def synchronize(remote_pk, repository_pk):
         r=repository.name, p=remote.name))
 
     deferred_download = (remote.policy != Remote.IMMEDIATE)  # Interpret download policy
-    first_stage = RpmFirstStage(remote, deferred_download)
+    kickstart = get_kickstart_data(remote)
+
+    if kickstart:
+        resource_names = ["addons", "variants"]
+
+        for resource_name in resource_names:
+            for resource in kickstart[resource_name]:
+                name = f"{resource_name}-{str(uuid.uuid4())}"
+                new_repository = Repository(name=name)
+                new_repository.save()
+                resource["repository_id"] = str(new_repository.pk)
+
+                url = urljoin(remote.url, f"{resource['packages']}/repodata/repomd.xml")
+                downloader = remote.get_downloader(url=url)
+                try:
+                    downloader.fetch()
+                except ClientResponseError as exc:
+                    if 404 == exc.status:
+                        continue
+                    raise
+
+                first_stage = RpmFirstStage(
+                    remote, deferred_download, url_path=resource["packages"]
+                )
+                dv = RpmDeclarativeVersion(first_stage=first_stage,
+                                           repository=new_repository,
+                                           remove_duplicates=[package_dupe_criteria])
+                dv.create()
+
+    first_stage = RpmFirstStage(remote, deferred_download, kickstart=kickstart)
     dv = RpmDeclarativeVersion(first_stage=first_stage,
                                repository=repository,
                                remove_duplicates=[package_dupe_criteria])
@@ -110,7 +152,7 @@ class RpmFirstStage(Stage):
     that should exist in the new :class:`~pulpcore.plugin.models.RepositoryVersion`.
     """
 
-    def __init__(self, remote, deferred_download):
+    def __init__(self, remote, deferred_download, url_path="", kickstart=None):
         """
         The first stage of a pulp_rpm sync pipeline.
 
@@ -119,10 +161,16 @@ class RpmFirstStage(Stage):
             deferred_download (bool): if True the downloading will not happen now. If False, it will
                 happen immediately.
 
+        Keyword Args:
+            url_path(str): Additional path to add to remote.url
+            kickstart(dict): Kickstart data
+
         """
         super().__init__()
         self.remote = remote
         self.deferred_download = deferred_download
+        self.url_path = url_path
+        self.kickstart = kickstart
 
     @staticmethod
     async def parse_updateinfo(updateinfo_xml_path):
@@ -224,13 +272,22 @@ class RpmFirstStage(Stage):
         packages_pb.save()
         erratum_pb.save()
 
+        url_path = f"{self.url_path.strip('/')}/" if self.url_path else self.url_path
+        remote_url = urljoin(self.remote.url, url_path)
+
         with ProgressBar(message='Downloading Metadata Files') as metadata_pb:
             downloader = self.remote.get_downloader(
-                url=urljoin(self.remote.url, 'repodata/repomd.xml')
+                url=urljoin(remote_url, 'repodata/repomd.xml')
             )
             # TODO: decide how to distinguish between a mirror list and a normal repo
             result = await downloader.run()
             metadata_pb.increment()
+
+            if self.kickstart:
+                distribution_tree = DistributionTree(**self.kickstart["distribution_tree"])
+                dc = DeclarativeContent(content=distribution_tree)
+                dc.extra_data = self.kickstart
+                await self.put(dc)
 
             repomd_path = result.path
             repomd = cr.Repomd(repomd_path)
@@ -239,10 +296,10 @@ class RpmFirstStage(Stage):
 
             for record in repomd.records:
                 if record.type in PACKAGE_REPODATA:
-                    package_repodata_urls[record.type] = urljoin(self.remote.url,
+                    package_repodata_urls[record.type] = urljoin(remote_url,
                                                                  record.location_href)
                 elif record.type in UPDATE_REPODATA:
-                    updateinfo_url = urljoin(self.remote.url, record.location_href)
+                    updateinfo_url = urljoin(remote_url, record.location_href)
                     downloader = self.remote.get_downloader(url=updateinfo_url)
                     downloaders.append([downloader.run()])
                 else:
@@ -283,7 +340,7 @@ class RpmFirstStage(Stage):
                             artifact = Artifact(size=package.size_package)
                             checksum_type = getattr(CHECKSUM_TYPES, package.checksum_type.upper())
                             setattr(artifact, checksum_type, package.pkgId)
-                            url = urljoin(self.remote.url, package.location_href)
+                            url = urljoin(remote_url, package.location_href)
                             filename = os.path.basename(package.location_href)
                             da = DeclarativeArtifact(
                                 artifact=artifact,
@@ -348,17 +405,60 @@ class RpmContentSaver(ContentSaver):
         """
         Save a batch of UpdateCollection, UpdateCollectionPackage, UpdateReference objects.
 
+        When it has a treeinfo file, save a batch of Addon, Checksum, Image, Variant objects.
+
         Args:
             batch (list of :class:`~pulpcore.plugin.stages.DeclarativeContent`): The batch of
                 :class:`~pulpcore.plugin.stages.DeclarativeContent` objects to be saved.
 
         """
+        def _handle_distribution_tree(declarative_content):
+            distribution_tree = declarative_content.content
+            kickstart_data = declarative_content.extra_data
+
+            addons = []
+            checksums = []
+            images = []
+            variants = []
+
+            for addon in kickstart_data["addons"]:
+                instance = Addon(**addon)
+                instance.distribution_tree = distribution_tree
+                addons.append(instance)
+
+            for checksum in kickstart_data["checksums"]:
+                instance = Checksum(**checksum)
+                instance.distribution_tree = distribution_tree
+                checksums.append(instance)
+
+            for image in kickstart_data["images"]:
+                instance = Image(**image)
+                instance.distribution_tree = distribution_tree
+                images.append(instance)
+
+            for variant in kickstart_data["variants"]:
+                instance = Variant(**variant)
+                instance.distribution_tree = distribution_tree
+                variants.append(instance)
+
+            if addons:
+                Addon.objects.bulk_create(addons, ignore_conflicts=True)
+            if checksums:
+                Checksum.objects.bulk_create(checksums, ignore_conflicts=True)
+            if images:
+                Image.objects.bulk_create(images, ignore_conflicts=True)
+            if variants:
+                Variant.objects.bulk_create(variants, ignore_conflicts=True)
+
         update_collections_to_save = []
         update_references_to_save = []
         update_collection_packages_to_save = []
 
         for declarative_content in batch:
             if declarative_content is None:
+                continue
+            if isinstance(declarative_content.content, DistributionTree):
+                _handle_distribution_tree(declarative_content)
                 continue
             if not isinstance(declarative_content.content, UpdateRecord):
                 continue
