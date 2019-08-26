@@ -15,7 +15,7 @@ from pulpcore.plugin.models import (
 
 from pulpcore.plugin.tasking import WorkingDirectory
 
-from pulp_rpm.app.models import Package, RpmPublication, UpdateRecord
+from pulp_rpm.app.models import DistributionTree, Package, RpmPublication, UpdateRecord
 
 log = logging.getLogger(__name__)
 
@@ -97,16 +97,17 @@ def publish(repository_version_pk):
     with WorkingDirectory():
         with RpmPublication.create(repository_version) as publication:
             packages = populate(publication)
+            cwd = os.getcwd()
 
             # Prepare metadata files
-            repomd_path = os.path.join(os.getcwd(), "repomd.xml")
-            pri_xml_path = os.path.join(os.getcwd(), "primary.xml.gz")
-            fil_xml_path = os.path.join(os.getcwd(), "filelists.xml.gz")
-            oth_xml_path = os.path.join(os.getcwd(), "other.xml.gz")
-            pri_db_path = os.path.join(os.getcwd(), "primary.sqlite")
-            fil_db_path = os.path.join(os.getcwd(), "filelists.sqlite")
-            oth_db_path = os.path.join(os.getcwd(), "other.sqlite")
-            upd_xml_path = os.path.join(os.getcwd(), "updateinfo.xml.gz")
+            repomd_path = os.path.join(cwd, "repomd.xml")
+            pri_xml_path = os.path.join(cwd, "primary.xml.gz")
+            fil_xml_path = os.path.join(cwd, "filelists.xml.gz")
+            oth_xml_path = os.path.join(cwd, "other.xml.gz")
+            pri_db_path = os.path.join(cwd, "primary.sqlite")
+            fil_db_path = os.path.join(cwd, "filelists.sqlite")
+            oth_db_path = os.path.join(cwd, "other.sqlite")
+            upd_xml_path = os.path.join(cwd, "updateinfo.xml.gz")
 
             pri_xml = cr.PrimaryXmlFile(pri_xml_path)
             fil_xml = cr.FilelistsXmlFile(fil_xml_path)
@@ -199,7 +200,27 @@ def populate(publication):
         packages (pulp_rpm.models.Package): A list of published packages.
 
     """
-    packages = Package.objects.filter(pk__in=publication.repository_version.content).\
+    versions = []
+
+    distribution_trees = DistributionTree.objects.filter(
+        pk__in=publication.repository_version.content
+    )
+    for distribution_tree in distribution_trees:
+        for addon in distribution_tree.addons.all():
+            repository_version = RepositoryVersion.latest(addon.repository)
+            if repository_version:
+                versions.append(repository_version)
+        for variant in distribution_tree.variants.all():
+            repository_version = RepositoryVersion.latest(variant.repository)
+            if repository_version:
+                versions.append(repository_version)
+
+    contents = []
+    versions.append(publication.repository_version)
+    for version in versions:
+        contents.extend(version.content.all())
+
+    packages = Package.objects.filter(pk__in=contents).\
         prefetch_related('contentartifact_set')
     published_artifacts = []
 

@@ -34,6 +34,7 @@ from pulp_rpm.tests.functional.constants import (
     RPM_RICH_WEAK_FIXTURE_URL,
     RPM_SHA512_FIXTURE_URL,
     SRPM_UNSIGNED_FIXTURE_URL,
+    RPM_KICKSTART_FIXTURE_URL,
 )
 from pulp_rpm.tests.functional.utils import publish, set_up_module as setUpModule  # noqa:F401
 
@@ -67,7 +68,7 @@ class PublishAnyRepoVersionTestCase(unittest.TestCase):
         6. Assert that an exception is raised when providing two different
            repository versions to be published at same time.
         """
-        body = gen_rpm_remote()
+        body = gen_rpm_remote(url=RPM_KICKSTART_FIXTURE_URL)
         remote = self.client.post(RPM_REMOTE_PATH, body)
         self.addCleanup(self.client.delete, remote['_href'])
 
@@ -78,7 +79,7 @@ class PublishAnyRepoVersionTestCase(unittest.TestCase):
 
         # Step 1
         repo = self.client.get(repo['_href'])
-        for rpm_content in get_content(repo)[RPM_PACKAGE_CONTENT_NAME]:
+        for rpm_content in get_content(repo)['rpm.distribution_tree']:
             self.client.post(
                 repo['_versions_href'],
                 {'add_content_units': [rpm_content['_href']]}
