@@ -27,6 +27,13 @@ else
   RANGE="$RANGE~..$RANGE"
 fi
 
+export HAS_TESTS="no"
+MODIFIED_FILES=`git diff --name-only $RANGE`
+echo $MODIFIED_FILES
+if [[ $MODIFIED_FILES =~ "tests/performance" ]]; then
+  export HAS_TESTS="performance"
+fi
+
 for sha in `git log --format=oneline --no-merges "$RANGE" | cut '-d ' -f1`
 do
   python .travis/validate_commit_message.py $sha

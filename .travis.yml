@@ -21,9 +21,9 @@ env:
     - DB=postgres TEST=bindings
 matrix:
   exclude:
-    - python: '3.6'
+    - python: "3.6"
       env: DB=postgres TEST=bindings
-    - python: '3.6'
+    - python: "3.6"
       env: DB=postgres TEST=docs
   fast_finish: true
 services:
@@ -36,7 +36,7 @@ addons:
       - httpie
       - jq
   # postgres versions provided by el7 RHSCL (lowest supportable version)
-  postgresql: '9.6'
+  postgresql: "9.6"
 before_install: .travis/before_install.sh
 install: .travis/install.sh
 before_script: .travis/before_script.sh
@@ -84,7 +84,5 @@ jobs:
       env:
         - DB=postgres
         - TEST=performance
-      if: type = cron
+      if: type = cron OR env(HAS_TESTS) = "performance"
 notifications: None
-
-...
