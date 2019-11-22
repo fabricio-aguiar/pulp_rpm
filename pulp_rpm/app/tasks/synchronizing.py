@@ -123,6 +123,10 @@ def synchronize(remote_pk, repository_pk):
     deferred_download = (remote.policy != Remote.IMMEDIATE)  # Interpret download policy
 
     treeinfo = get_treeinfo_data(remote)
+    import tracemalloc
+    from pulp_rpm.tests.performance.utils import TakeSnapshot
+    tracemalloc.start(25)
+    TakeSnapshot().start()
     if treeinfo:
         treeinfo["repositories"] = {}
         for repodata in set(treeinfo["download"]["repodatas"]):

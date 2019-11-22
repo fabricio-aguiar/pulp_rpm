@@ -24,6 +24,7 @@ from pulp_rpm.tests.functional.constants import (
     CENTOS8_BASEOS_URL,
     CENTOS8_KICKSTART_APP_URL,
     CENTOS8_KICKSTART_BASEOS_URL,
+    RHEL7_URL,
 )
 from pulp_rpm.tests.functional.utils import gen_rpm_remote
 from pulp_rpm.tests.functional.utils import set_up_module as setUpModule  # noqa:F401
@@ -148,3 +149,7 @@ class SyncTestCase(unittest.TestCase):
     def test_centos8_kickstart_appstream_on_demand(self):
         """Kickstart Sync CentOS 8 AppStream."""
         self.rpm_sync(url=CENTOS8_KICKSTART_APP_URL)
+
+    def test_rhel7_on_demand(self):
+        """Sync RHEL 7."""
+        self.rpm_sync(url=RHEL7_URL)

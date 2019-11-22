@@ -258,3 +258,4 @@ CENTOS8_KICKSTART_BASEOS_URL = "http://mirror.linux.duke.edu/pub/centos/8/BaseOS
 CENTOS8_APPSTREAM_URL = "http://mirror.linux.duke.edu/pub/centos/8/AppStream/x86_64/os/"
 CENTOS8_BASEOS_URL = "http://mirror.linux.duke.edu/pub/centos/8/BaseOS/x86_64/os/"
 EPEL7_URL = "https://dl.fedoraproject.org/pub/epel/7/x86_64/"
+RHEL7_URL = "http://cdn.stage.redhat.com/content/dist/rhel/server/7/7Server/x86_64/os/"
