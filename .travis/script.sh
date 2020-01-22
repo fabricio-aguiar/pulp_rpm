@@ -38,8 +38,8 @@ if [ "$TEST" = 'bindings' ]; then
   export PULP_BINDINGS_PR_NUMBER=$(echo $COMMIT_MSG | grep -oP 'Required\ PR:\ https\:\/\/github\.com\/pulp\/pulp-openapi-generator\/pull\/(\d+)' | awk -F'/' '{print $7}')
 
   if [ -n "$PULP_BINDINGS_PR_NUMBER" ]; then
-    git fetch origin +refs/pull/$PULP_BINDINGS_PR_NUMBER/merge
-    git checkout FETCH_HEAD
+    git fetch origin pull/$PULP_BINDINGS_PR_NUMBER/head:$PULP_BINDINGS_PR_NUMBER
+    git checkout $PULP_BINDINGS_PR_NUMBER
   fi
 
   ./generate.sh pulpcore python
@@ -111,7 +111,7 @@ set -u
 
 if [[ "$TEST" == "performance" ]]; then
   echo "--- Performance Tests ---"
-  if [[ -z "$PERFORMANCE_TEST" ]]; then
+  if [[ -z ${PERFORMANCE_TEST+x} ]]; then
     pytest -vv -r sx --color=yes --pyargs --capture=no --durations=0 pulp_rpm.tests.performance || show_logs_and_return_non_zero
   else
     pytest -vv -r sx --color=yes --pyargs --capture=no --durations=0 pulp_rpm.tests.performance.test_$PERFORMANCE_TEST || show_logs_and_return_non_zero
