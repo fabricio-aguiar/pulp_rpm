@@ -7,7 +7,7 @@
 #
 # For more info visit https://github.com/pulp/plugin_template
 
-PULP_CONTAINER=pulp
+PULP_CONTAINER=pulp.example.com
 
 # Run a command
 cmd_prefix() {

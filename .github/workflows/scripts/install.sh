@@ -40,7 +40,7 @@ if [ "${TAG_BUILD}" = "1" ]; then
   # Quoting ${TAG} ensures Ansible casts the tag as a string.
   cat >> vars/main.yaml << VARSYAML
 image:
-  name: pulp
+  name: pulp.example.com
   tag: "${TAG}"
 plugins:
   - name: pulpcore
@@ -48,15 +48,15 @@ plugins:
   - name: pulp_rpm
     source:  "${PLUGIN_NAME}"
 services:
-  - name: pulp
-    image: "pulp:${TAG}"
+  - name: pulp.example.com
+    image: "pulp.example.com:${TAG}"
     volumes:
       - ./settings:/etc/pulp
 VARSYAML
 else
   cat >> vars/main.yaml << VARSYAML
 image:
-  name: pulp
+  name: pulp.example.com
   tag: "${TAG}"
 plugins:
   - name: pulp_rpm
@@ -64,8 +64,8 @@ plugins:
   - name: pulpcore
     source: ./pulpcore
 services:
-  - name: pulp
-    image: "pulp:${TAG}"
+  - name: pulp.example.com
+    image: "pulp.example.com:${TAG}"
     volumes:
       - ./settings:/etc/pulp
 VARSYAML

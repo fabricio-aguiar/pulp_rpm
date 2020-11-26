@@ -24,7 +24,6 @@ then
   TAG_BUILD=0
 else
   TAG_BUILD=1
-  BRANCH="${GITHUB_REF##refs/tags/}"
 fi
 
 if [[ "$TEST" == "plugin-from-pypi" ]]; then
@@ -76,8 +75,8 @@ if [ -n "$PULP_OPENAPI_GENERATOR_PR_NUMBER" ]; then
 fi
 
 cd pulp-openapi-generator
-sed -i -e 's/localhost:24817/pulp/g' generate.sh
-sed -i -e 's/:24817/pulp/g' generate.sh
+sed -i -e 's/localhost:24817/pulp.example.com/g' generate.sh
+sed -i -e 's/:24817/pulp.example.com/g' generate.sh
 cd ..
 
 git clone --depth=1 https://github.com/pulp/pulpcore.git --branch master
