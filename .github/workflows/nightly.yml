@@ -7,6 +7,7 @@
 ---
 name: Pulp Nightly CI/CD
 on:
+  push:
   schedule:
     # * is a special character in YAML so you have to quote this string
     # runs at 3:00 UTC daily
@@ -37,36 +38,7 @@ jobs:
 
       - name: Install httpie
         run: |
-          echo ::group::HTTPIE
-          sudo apt-get update -yq
-          sudo -E apt-get -yq --no-install-suggests --no-install-recommends install httpie
-          echo ::endgroup::
-          echo "HTTPIE_CONFIG_DIR=$GITHUB_WORKSPACE/.ci/assets/httpie/" >> $GITHUB_ENV
           echo "TEST=${{ matrix.env.TEST }}" >> $GITHUB_ENV
-
-      - name: Before Install
-        run: .github/workflows/scripts/before_install.sh
-        shell: bash
-
-      - name: Install
-        run: .github/workflows/scripts/install.sh
-        env:
-          PY_COLORS: '1'
-          ANSIBLE_FORCE_COLOR: '1'
-        shell: bash
-
-      - name: Before Script
-        run: |
-          .github/workflows/scripts/before_script.sh
-
-      - name: Setting secrets
-        run: python3 .github/workflows/scripts/secrets.py "$SECRETS_CONTEXT"
-        env:
-          SECRETS_CONTEXT: ${{ toJson(secrets) }}
-
-      - name: Script
-        run: .github/workflows/scripts/script.sh
-        shell: bash
 
   publish:
     runs-on: ubuntu-latest
@@ -123,22 +95,22 @@ jobs:
         env:
           SECRETS_CONTEXT: ${{ toJson(secrets) }}
 
-      
+
       - name: Publish nightly client to rubygems
         run: .ci/scripts/publish_client_gem.sh
         shell: bash
-      
 
-      
+
+
       - name: Publish nightly client to pypi
         run: .ci/scripts/publish_client_pypi.sh
         shell: bash
-      
 
-      
+
+
       - name: Publish nightly docs
         run: .ci/scripts/publish_docs.sh nightly ${GITHUB_REF##*/}
-      
+
 
       - name: After failure
         if: failure()
@@ -155,9 +127,13 @@ jobs:
   performance:
     runs-on: ubuntu-latest
     needs: test
-
-    env:
-      TEST: performance
+    strategy:
+      fail-fast: false
+      matrix:
+        env:
+          - PERFORMANCE_TEST: sync
+          - PERFORMANCE_TEST: publish
+          - PERFORMANCE_TEST: pulp_to_pulp
 
     steps:
       - uses: actions/checkout@v2
@@ -170,16 +146,14 @@ jobs:
         with:
           python-version: "3.7"
 
-      - uses: actions/setup-ruby@v1
-        with:
-          ruby-version: "2.6"
-
       - name: Install httpie
         run: |
           echo ::group::HTTPIE
           sudo apt-get update -yq
           sudo -E apt-get -yq --no-install-suggests --no-install-recommends install httpie
           echo ::endgroup::
+          echo "TEST=performance" >> $GITHUB_ENV
+          echo "PERFORMANCE_TEST=${{ matrix.env.PERFORMANCE_TEST }}" >> $GITHUB_ENV
           echo "HTTPIE_CONFIG_DIR=$GITHUB_WORKSPACE/.ci/assets/httpie/" >> $GITHUB_ENV
 
       - name: Install python dependencies
@@ -206,25 +180,9 @@ jobs:
         run: python3 .github/workflows/scripts/secrets.py "$SECRETS_CONTEXT"
         env:
           SECRETS_CONTEXT: ${{ toJson(secrets) }}
-        
-      - name: "sync performance test"
-        env:
-          TEST: performance
-          PERFORMANCE_TEST: sync
+
+      - name: Performance test
         run: .github/workflows/scripts/script.sh
-        
-      - name: "publish performance test"
-        env:
-          TEST: performance
-          PERFORMANCE_TEST: publish
-        run: .github/workflows/scripts/script.sh
-        
-      - name: "pulp_to_pulp performance test"
-        env:
-          TEST: performance
-          PERFORMANCE_TEST: pulp_to_pulp
-        run: .github/workflows/scripts/script.sh
-        
 
       - name: After failure
         if: failure()
